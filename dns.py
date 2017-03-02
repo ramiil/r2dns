@@ -1,13 +1,13 @@
 import socket
 import sqlite3
 
-class DN:
+class NameStoarge:
   def __init__(self, dbFile):
     self.db = sqlite3.connect(dbFile)
     self.cursor = self.db.cursor()
 
   def getIpByName(self, dn):
-    self.cursor.execute("SELECT ip FROM Records WHERE data='"+dn+"'")
+    self.cursor.execute("SELECT target FROM Records WHERE base='"+dn+"' AND type='A'")
     rezult = self.cursor.fetchall()
     if rezult:
       return rezult[0][0]
@@ -18,11 +18,6 @@ class DNSQuery:
   def __init__(self, data):
     self.data=data
     self.domain=''
-
-    asciip=''
-    for ch in self.data:
-      asciip += ' 0x'+ch.encode('hex')
-    print 'question: ', asciip
 
     tip = (ord(data[2]) >> 3) & 15   # Opcode bits
     if tip == 0:                     # Standard query
@@ -45,24 +40,19 @@ class DNSQuery:
       packet+='\xc0\x0c'                                             # Pointer to domain name
       packet+='\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04'             # Response type, ttl and resource data length -> 4 bytes
       packet+=str.join('',map(lambda x: chr(int(x)), ip.split('.'))) # 4bytes of IP
-      asciip=''
-      for ch in packet:
-        asciip += ' 0x'+ch.encode('hex')
-      print 'answer: ', asciip
+      print 'Answer: ', self.domain, ' -> ', ip
     return packet
 
 udps = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 udps.bind(('',53))
 
-d=DN('dns.sqlite')
+ns=NameStoarge('dns.sqlite')
 
 try:
   while 1:
     qData, clAddr = udps.recvfrom(1024)
-    p=DNSQuery(qData)
-    ip=d.getIpByName(p.domain[:len(p.domain)-1])
-    udps.sendto(p.answer(ip), clAddr)
-    print 'Answer: ', p.domain, ' -> ', ip
+    dnsq=DNSQuery(qData)
+    udps.sendto(dnsq.answer(ns.getIpByName(dnsq.domain[:len(dnsq.domain)-1])), clAddr)
 
 except KeyboardInterrupt:
   udps.close()

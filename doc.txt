@@ -35,3 +35,14 @@ PTf         POINTER
 
 PTf - if both 11, all the rest is integer offset
 POINTER - integer offset from the beginning of message to beginning of name record
+
+CREATE TABLE users(id INTEGER PRIMARY KEY, base TEXT, target TEXT, type TEXT, ttl INTEGER)
+
+RECORD:
+BASE -> TARGET
+
+A RECORD:
+IP -> HOSTNAME
+
+
+SELECT base FROM Records WHERE target='localhost' AND type='A'
