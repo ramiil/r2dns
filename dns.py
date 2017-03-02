@@ -40,7 +40,7 @@ class DNSQuery:
       packet+='\xc0\x0c'                                             # Pointer to domain name
       packet+='\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04'             # Response type, ttl and resource data length -> 4 bytes
       packet+=str.join('',map(lambda x: chr(int(x)), ip.split('.'))) # 4bytes of IP
-      print 'Answer: ', self.domain, ' -> ', ip
+      print ' Answer: ',self.domain,' -> ',ip
     return packet
 
 udps = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -51,6 +51,7 @@ ns=NameStoarge('dns.sqlite')
 try:
   while 1:
     qData, clAddr = udps.recvfrom(1024)
+    print "New request from ",clAddr[0]
     dnsq=DNSQuery(qData)
     udps.sendto(dnsq.answer(ns.getIpByName(dnsq.domain[:len(dnsq.domain)-1])), clAddr)
 
