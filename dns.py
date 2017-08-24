@@ -7,8 +7,11 @@ class NameStoarge:
     self.cursor = self.db.cursor()
 
   def getIpByName(self, dn):
-    self.cursor.execute("SELECT target FROM Records WHERE base='"+dn+"' AND type='A'")
-    rezult = self.cursor.fetchall()
+    if (dn=='myself.global'):
+      return '255.255.255.255'
+    else:
+      self.cursor.execute("SELECT target FROM Records WHERE base='"+dn+"' AND type='A'")
+      rezult = self.cursor.fetchall()
     if rezult:
       return rezult[0][0]
     else:
@@ -28,19 +31,22 @@ class DNSQuery:
         ini+=lon+1
         lon=ord(data[ini])
 
-  def answer(self, ip):
+  def answer(self, ip, clientIP):
     packet=''
     if self.domain:
+      if (ip=='255.255.255.255'):  # Mean we need return client's IP instead
+        ip=clientIP
       if (ip=='0.0.0.0'):
         packet+=self.data[:2] + "\x81\x83" # NXDOMAIN
       else:
-        packet+=self.data[:2] + "\x81\x80" # OK
+        packet+=self.data[:2] + "\x85\x80" # OK
       packet+=self.data[4:6] + self.data[4:6] + '\x00\x00\x00\x00'   # Questions and Answers Counts
       packet+=self.data[12:]                                         # Original Domain Name Question
       packet+='\xc0\x0c'                                             # Pointer to domain name
       packet+='\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04'             # Response type, ttl and resource data length -> 4 bytes
       packet+=str.join('',map(lambda x: chr(int(x)), ip.split('.'))) # 4bytes of IP
       print ' Answer: ',self.domain,' -> ',ip
+      print " ".join("{:02x}".format(ord(c)) for c in packet)
     return packet
 
 udps = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -52,8 +58,10 @@ try:
   while 1:
     qData, clAddr = udps.recvfrom(1024)
     print "New request from ",clAddr[0]
+    ipHash = socket.inet_aton(clAddr[0])
+    print map(lambda x: x.encode('hex'), ipHash)
     dnsq=DNSQuery(qData)
-    udps.sendto(dnsq.answer(ns.getIpByName(dnsq.domain[:len(dnsq.domain)-1])), clAddr)
+    udps.sendto(dnsq.answer(ns.getIpByName(dnsq.domain[:len(dnsq.domain)-1]), clAddr[0]), clAddr)
 
 except KeyboardInterrupt:
   udps.close()
