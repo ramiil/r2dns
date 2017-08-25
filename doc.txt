@@ -3,6 +3,12 @@
 \___/ \___/ \___/ \___/ \___/ \___/ \/ \______/ \/ \_________/ \/ \___/ \___/
  ID    #01   QCn   ANc   NSc   ARC   3   lol     4    test     0   Qtp   Qcl
 
+
+QCn - number of queries
+ANc - number of answers
+NSc - number of ns servers
+ARC - number of addtional records
+
 Qtp is Answer TYPE part. A\PTR\MX is here
 Qcl is Aswer CLASS part. 00 01 is IN(Internet)
 
