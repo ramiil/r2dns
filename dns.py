@@ -1,7 +1,7 @@
 import socket
 import sqlite3
 
-nameserver="bkz1.kdt.moe."
+nameserver=["bkz1.kdt.moe.", "bkz2.kdt.moe"]
 
 def setbit(number, index):
   number |= (1<<index)
@@ -42,7 +42,6 @@ class NameStoarge:
     self.cursor.execute("SELECT target FROM Records WHERE base='"+dn+"' AND type='A'")
     rezult = self.cursor.fetchall()
     if rezult:
-      print "NS found"
       return nameserver
     else:
       return "NXDOMAIN"
@@ -97,7 +96,7 @@ class DNSQuery:
     packet=''
     domain=''
     ip=''
-    print qtype
+    print "Query type: "+qtype
     if (qtype=="A"):
       domain = self.getDomain()
       ip = ns.getIpByDomain(domain[:-1])
@@ -105,11 +104,11 @@ class DNSQuery:
 	packet+=self.data[:2] + "\x81\x83" 	# We need return original query's ID + NXDOMAIN
       else:
 	packet+=self.data[:2] + "\x85\x80" 	# We need return original query's ID + requested domain's IP
-      packet+=self.data[4:6] + self.data[4:6] + '\x00\x00\x00\x01'   # Count of queries, answers, ns servers, additional records
+      packet+=self.data[4:6] + self.data[4:6] + '\x00\x01\x00\x01'   # Count of queries, answers, ns servers, additional records
       packet+=self.data[12:]                                         # Original Domain Name Request
       packet+='\xc0\x0c'                                             # Pointer to domain name block start
-      packet+='\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04'             # Response type, ttl and resource data length -> 4 bytes
-      packet+="".join(map(lambda x: chr(int(x)), ip.split('.')))	# 4bytes of IP
+      packet+='\x00\x01\x00\x01\x00\x00\x01\x2c\x00\x04'             # Response type, ttl and resource data length -> 4 bytes
+      packet+="".join(map(lambda x: chr(int(x)), ip.split('.')))			# 4bytes of IP
 
     if (qtype=="NS"):
       domain = self.getDomain()
@@ -118,11 +117,34 @@ class DNSQuery:
 	packet+=self.data[:2] + "\x81\x83" 	# We need return original query's ID + NXDOMAIN
       else:
 	packet+=self.data[:2] + "\x85\x80" 	# We need return original query's ID + requested domain's IP
-      packet+=self.data[4:6] + self.data[4:6] + '\x00\x00\x00\x01'   	# Count of queries, answers, ns servers, additional records
+      packet+=self.data[4:6] + '\x00\x02\x00\x01\x00\x01'	   	# Count of queries, answers, ns servers, additional records
       packet+=self.data[12:]                                         	# Original Domain Name Request
       packet+='\xc0\x0c'                                             	# Pointer to domain name block start
-      rdata="".join(map(lambda x:chr(len(x))+x, namesrv.split(".")))+'\x00'
-      packet+='\x00\x02\x00\x01\x00\x00\x00\x3c\x00'+chr(len(rdata)-1)
+      rdata="".join(map(lambda x:chr(len(x))+x, namesrv[0].split(".")))+'\x00'
+      packet+='\x00\x02\x00\x01\x00\x00\x01\x2c\x00'+chr(len(rdata)-1)
+      packet+=rdata
+      #rdata="".join(map(lambda x:chr(len(x))+x, namesrv[1].split(".")))+'\x00'
+      #packet+='\x00\x02\x00\x01\x00\x00\x01\x2c\x00'+chr(len(rdata)-1)
+      #packet+=rdata
+
+    if (qtype=="SOA"):
+      domain = self.getDomain()
+      namesrv = ns.getNS(domain[:-1])
+      if (namesrv=="0.0.0.0"):
+        packet+=self.data[:2] + "\x81\x83"      # We need return original query's ID + NXDOMAIN
+      else:
+        packet+=self.data[:2] + "\x85\x80"      # We need return original query's ID + requested domain's IP
+      packet+=self.data[4:6] + '\x00\x01\x00\x01\x00\x01'               # Count of queries, answers, ns servers, additional records
+      packet+=self.data[12:]                                            # Original Domain Name Request
+      packet+='\xc0\x0c'                                                # Pointer to domain name block start
+      rdata=''
+      rdata+="".join(map(lambda x:chr(len(x))+x, namesrv[1].split(".")))+'\x00'
+      rdata+="".join(map(lambda x:chr(len(x))+x, namesrv[1].split(".")))+'\x00'
+      rdata+='\x78\xB8\xF6\xAD'
+      rdata+='\x00\x00\x27\x10'
+      rdata+='\x00\x00\x09\x60'
+      rdata+='\x00\x09\x3A\x80'
+      packet+='\x00\x06\x00\x01\x00\x00\x01\x2c\x00'+chr(len(rdata)-1)
       packet+=rdata
 
     print ' Answer: '+domain+' -> '+ip
@@ -130,16 +152,28 @@ class DNSQuery:
     return packet
 
 udps = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-udps.bind(('',53))
+tcps = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+udps.bind(('', 53))
+
+tcps.bind(('', 53))
+tcps.listen(1)
 
 ns=NameStoarge('dns.sqlite')
 
 try:
   while 1:
+    print ""
     qData, clAddr = udps.recvfrom(1024)
-    print "New request from ",clAddr[0]
-    dnsq=DNSQuery(qData)
-    udps.sendto(dnsq.answer(dnsq.getQueryType()), clAddr)
+    if not qData:
+      conn, clAddr = tcps.accept()
+      qData = conn.recv(1024)
+      print "New request from TCP/"+clAddr[0]
+      dnsq=DNSQuery(qData)
+      conn.send(dnsq.answer(dnsq.getQueryType()))
+    else:
+      print "New request from UDP/"+clAddr[0]
+      dnsq=DNSQuery(qData)
+      udps.sendto(dnsq.answer(dnsq.getQueryType()), clAddr)
 
 except KeyboardInterrupt:
   udps.close()
